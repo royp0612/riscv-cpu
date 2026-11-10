@@ -17,6 +17,8 @@ module alu(
             SLL: y = a<<b[4:0];
             SRL: y = a>>b[4:0];
             SRA: y= $signed(a)>>>b[4:0];
+            SLTU: y = (a<b)?32'd1:32'd0;
+            PASSB: y = b;
             default: y = 32'd0;
         endcase
     end

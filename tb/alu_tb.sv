@@ -18,6 +18,9 @@ module alu_tb;
         end
     endtask
     initial begin
+        $dumpfile("alu.vcd");
+        $dumpvars(0, alu_tb);
+
         //addition
         CHECK(ADD, 32'd1, 32'd3, 32'd4);
         CHECK(ADD, 32'hFFFFFFFF, 32'd1, 32'd0);
@@ -33,10 +36,19 @@ module alu_tb;
         CHECK(SLL, 32'h00000001, 32'd4, 32'h00000010);
         CHECK(SRL, 32'h00000010, 32'd4, 32'h00000001);
         CHECK(SRA, 32'h10000000, 32'd4, 32'h01000000);
+        CHECK(SRA, 32'h80000000, 32'd4, 32'hF8000000); 
+        CHECK(SRL, 32'h80000000, 32'd4, 32'h08000000); 
         CHECK(SLT, 32'hFFFFFFFF, 32'd2, 32'd1);
-        CHECK(SLT, 32'hFFFFFFFE, 32'd2, 32'd0);
-        CHECK(SLTU, 32'd1, 32'd2, 32'd1);
+        CHECK(SLT, 32'hFFFFFFFE, 32'd2, 32'd1);
+        CHECK(SLT, 32'd2, 32'hFFFFFFFE, 32'd0);
+        CHECK(SLT, 32'd2, 32'd1, 32'd0);
+        
         CHECK(SLTU, 32'd2, 32'd1, 32'd0);
+        CHECK(SLTU, 32'hFFFFFFFE, 32'd2, 32'd0);
+        CHECK(SLTU, 32'd2, 32'hFFFFFFFE, 32'd1);
+
+        CHECK(PASSB, 32'd5,32'hFFFFFFFF, 32'hFFFFFFFF);
+        CHECK(PASSB, 32'd1,32'd0,32'd0);
 
 
         if (errors==0) $display("PASS: %0d tests", tests);
