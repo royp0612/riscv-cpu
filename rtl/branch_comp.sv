@@ -7,11 +7,12 @@ module branch_comp(
     always_comb begin
         case(branch_type)
             3'b000: taken = (a==b); //BEQ
-            3'b001: taken = (a!=b); //BNQ
-            3'b100: taken = ($signed(a)<=$signed(b)); //BLT
-            3'b101: taken = ($signed (a)>=$signed(b)); //BGT
-            3'b110: taken = (a<=b); //BLTU
-            3'b111: taken = (a>=b); //BGTU
+            3'b001: taken = (a!=b); //BNE
+            3'b100: taken = ($signed(a)<$signed(b)); //BLT
+            3'b101: taken = ($signed(a)>=$signed(b)); //BGE
+            3'b110: taken = (a<b); //BLTU
+            3'b111: taken = (a>=b); //BGEU
+            default: taken = 1'b0;
         endcase
     end
 endmodule

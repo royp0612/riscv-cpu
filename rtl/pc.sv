@@ -6,5 +6,5 @@ module pc(
 );
     always_ff@(posedge clk)
         if (reset)  pc_out <= 32'd0;
-        else        pc_out = pc_in;
+        else        pc_out <= pc_in;
 endmodule
