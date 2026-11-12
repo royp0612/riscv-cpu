@@ -45,7 +45,7 @@ module core(
         .pc_out(pc_out)
     );
     assign instr_addr = pc_out;
-    assign pc_plus4   = pc_out + 32'd4;
+    assign pc_plus4   = pc_out + 32'd4;`
     assign pc_in      = jalr ? (alu_result & 32'hFFFFFFFE) : (jump||(branch && branch_taken)) ? (pc_out+imm):pc_plus4;
 
     decoder decoder_inst(
