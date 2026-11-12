@@ -17,6 +17,8 @@ module decoder (
     output logic       valid
 );
 
+    import cpu_pkg::*;
+
     logic [6:0] opcode;
     logic [2:0] funct3;
     logic [6:0] funct7;
@@ -24,31 +26,6 @@ module decoder (
     assign opcode = instr[6:0];
     assign funct3 = instr[14:12];
     assign funct7 = instr[31:25];
-
-    localparam [3:0]
-        ALU_ADD   = 4'd0,
-        ALU_SUB   = 4'd1,
-        ALU_AND   = 4'd2,
-        ALU_OR    = 4'd3,
-        ALU_XOR   = 4'd4,
-        ALU_SLL   = 4'd5,
-        ALU_SRL   = 4'd6,
-        ALU_SRA   = 4'd7,
-        ALU_SLT   = 4'd8,
-        ALU_SLTU  = 4'd9,
-        ALU_PASSB = 4'd10;
-
-    localparam [2:0]
-        IMM_I = 3'd0,
-        IMM_S = 3'd1,
-        IMM_B = 3'd2,
-        IMM_U = 3'd3,
-        IMM_J = 3'd4;
-
-    localparam [1:0]
-        WB_ALU = 2'd0,
-        WB_MEM = 2'd1,
-        WB_PC4 = 2'd2;
 
     always_comb begin
 
@@ -68,7 +45,7 @@ module decoder (
         valid        = 1'b1;
 
         case (opcode)
-            7'b0110011: begin   //RTYPE
+            OP_R: begin   //RTYPE
                 reg_write = 1'b1;
                 alu_src = 1'b0;
 
@@ -107,7 +84,7 @@ module decoder (
                     funct7 != 7'b0000000)
                     valid = 1'b0;
             end
-            7'b0010011: begin   //ITYPE
+            OP_I: begin   //ITYPE
                 reg_write = 1'b1;
                 alu_src = 1'b1;
                 imm_type = IMM_I;
@@ -138,7 +115,7 @@ module decoder (
                     default: valid = 1'b0;
                 endcase
             end
-            7'b0000011: begin   //LOAD INSTRUCTION
+            OP_LOAD: begin   //LOAD INSTRUCTION
                 alu_op = ALU_ADD;
                 alu_src = 1'b1;
                 imm_type = IMM_I;
@@ -168,7 +145,7 @@ module decoder (
                     default: valid = 1'b0;
                 endcase
             end
-            7'b0100011: begin //STORE INSTRUCTION
+            OP_STORE: begin //STORE INSTRUCTION
                 alu_op = ALU_ADD;
                 alu_src = 1'b1;
                 imm_type = IMM_S;
@@ -181,7 +158,7 @@ module decoder (
                     default: valid = 1'b0;
                 endcase
             end
-            7'b1100011: begin //BRANCH
+            OP_BRANCH: begin //BRANCH
                 branch = 1'b1;
                 imm_type = IMM_B;
 
@@ -194,13 +171,13 @@ module decoder (
                     default: valid = 1'b0;
                 endcase
             end
-            7'b1101111: begin //JUMP AND LINK
+            OP_JAL: begin //JUMP AND LINK
                 jump = 1'b1;
                 reg_write = 1'b1;
                 imm_type = IMM_J;
                 wb_sel = WB_PC4;
             end
-            7'b1100111: begin //JUMP VIA REGISTER
+            OP_JALR: begin //JUMP VIA REGISTER
                 if (funct3 == 3'b000) begin
                     jump = 1'b1;
                     jalr = 1'b1;
@@ -214,14 +191,14 @@ module decoder (
                     valid = 1'b0;
             end
 
-            7'b0110111: begin //LOAD UPPER IMMEDIATE
+            OP_LUI: begin //LOAD UPPER IMMEDIATE
                 imm_type = IMM_U;
                 alu_op = ALU_PASSB;
                 alu_src = 1'b1;
                 reg_write = 1'b1;
             end
 
-            7'b0010111: begin //UPPER IMMEDIATE TO PC
+            OP_AUIPC: begin //UPPER IMMEDIATE TO PC
                 imm_type = IMM_U;
                 alu_op = ALU_ADD;
                 alu_a_sel = 1'b1;

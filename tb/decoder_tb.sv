@@ -1,4 +1,6 @@
-module decoder_tb; 
+module decoder_tb;
+    import cpu_pkg::*;
+
     logic [31:0] instr;
     logic [3:0] alu_op;
     logic [2:0] imm_type;
@@ -29,42 +31,42 @@ module decoder_tb;
         //ADDING x3 <- x1 x2
         instr = 32'h002081B3;
         #1;
-        if(alu_op != 4'd0 || alu_src !=1'b0 || reg_write !=1'b1 || valid!=1'b1)
+        if(alu_op != ALU_ADD || alu_src !=1'b0 || reg_write !=1'b1 || valid!=1'b1)
             $fatal(1,"ADDITION FAILED");
         $display("PASS: ADDITION PASSED");
         instr = 32'h402081B3;
         #1;
         //SUBTRACTIOn
-        if(alu_op!=4'd1||alu_src!=1'b0||reg_write!=1'b1||valid!=1'b1)
+        if(alu_op!=ALU_SUB||alu_src!=1'b0||reg_write!=1'b1||valid!=1'b1)
             $fatal(1,"SUBTRACTION FAILED");
         $display("PASS: SUBTRACTION PASSED");
         //ADDING WITH IMMEDIATE VALUE
         instr = 32'h00A10093;
         #1;
-        if(alu_op!=4'd0||alu_src!=1'b1||reg_write !=1'b1||valid!=1'b1||imm_type!=3'd0)
+        if(alu_op!=ALU_ADD||alu_src!=1'b1||reg_write !=1'b1||valid!=1'b1||imm_type!=IMM_I)
             $fatal(1, "ADDI FAILED");
         $display("PASS: ADDI PASSED");
         //STORING
         instr = 32'h00312423;
         #1;
-        if(mem_write!=1'b1||imm_type!=3'd1||mem_size!=2'b10||reg_write!=1'b0||alu_src!=1'b1||valid!=1'b1)
+        if(mem_write!=1'b1||imm_type!=IMM_S||mem_size!=2'b10||reg_write!=1'b0||alu_src!=1'b1||valid!=1'b1)
             $fatal(1,"SW FAILED");
         $display("PASS: SW PASSED");
         instr = 32'h00208863;
         #1;
-        if(branch!=1'b1||imm_type!=3'd2||reg_write!=1'b0||valid!=1'b1)
+        if(branch!=1'b1||imm_type!=IMM_B||reg_write!=1'b0||valid!=1'b1)
             $fatal(1, "BRANCH FAILED");
         $display("PASS: BRANCH PASSED");
         //JUMP AND LINK
         instr = 32'h014000EF;
         #1;
-        if(jump!=1'b1||imm_type!=3'd4||reg_write!=1'b1||jalr!=1'b0||valid!=1'b1||wb_sel!=2'd2)
+        if(jump!=1'b1||imm_type!=IMM_J||reg_write!=1'b1||jalr!=1'b0||valid!=1'b1||wb_sel!=WB_PC4)
             $fatal(1, "JAL FAILED");
         $display("PASS: JAL PASSED");
         //LOAD UPPER IMMEDIATE
         instr = 32'h123450B7;
         #1;
-        if(imm_type!=3'd3||alu_op!=4'd10||alu_src!=1'b1||reg_write!=1'b1||valid!=1'b1)
+        if(imm_type!=IMM_U||alu_op!=ALU_PASSB||alu_src!=1'b1||reg_write!=1'b1||valid!=1'b1)
             $fatal(1, "LUI FAILED");
         $display("PASS: LUI PASSED");
         //INVALID INSTRUCTION

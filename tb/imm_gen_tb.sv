@@ -2,6 +2,7 @@
 `timescale 1ns/1ps
 
 module imm_gen_tb;
+    import cpu_pkg::*;
 
     logic [31:0] instr;
     logic [2:0] imm_type;
@@ -16,7 +17,7 @@ module imm_gen_tb;
     initial begin
         // TEST 1: I-type (ADDI x1, x2, 10)
         instr = 32'h00A10093;
-        imm_type = 3'd0;
+        imm_type = IMM_I;
         #1;
 
         if (imm !== 32'd10)
@@ -26,7 +27,7 @@ module imm_gen_tb;
 
         // TEST 2: S-type (SW x3, 8(x2))
         instr = 32'h00312423;
-        imm_type = 3'd1;
+        imm_type = IMM_S;
         #1;
 
         if (imm !== 32'd8)
@@ -36,7 +37,7 @@ module imm_gen_tb;
 
         // TEST 3: B-type (BEQ x1, x2, 16)
         instr = 32'h00208863;
-        imm_type = 3'd2;
+        imm_type = IMM_B;
         #1;
 
         if (imm !== 32'd16)
@@ -46,7 +47,7 @@ module imm_gen_tb;
 
         // TEST 4: U-type (LUI x1, 0x12345)
         instr = 32'h123450B7;
-        imm_type = 3'd3;
+        imm_type = IMM_U;
         #1;
 
         if (imm !== 32'h12345000)
@@ -56,7 +57,7 @@ module imm_gen_tb;
 
         // TEST 5: J-type (JAL x1, 20)
         instr = 32'h014000EF;
-        imm_type = 3'd4;
+        imm_type = IMM_J;
         #1;
 
         if (imm !== 32'd20)
