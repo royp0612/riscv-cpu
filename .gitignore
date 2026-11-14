@@ -15,6 +15,9 @@
 *.log
 *.str
 *.dcp
+.mov
+.MOV
+.mp4
 
 # Editors / OS
 .vscode/

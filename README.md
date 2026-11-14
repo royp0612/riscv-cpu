@@ -3,7 +3,7 @@
 A single-cycle 32-bit RISC-V (RV32I) processor designed from scratch in SystemVerilog, verified in simulation with self-checking testbenches, and deployed on a Xilinx Artix-7 FPGA (Digilent Basys 3).
 
 <!-- Replace with your demo video or GIF -->
-**Demo:** [Video of the CPU running on the Basys 3](LINK-TO-VIDEO)
+**Demo:** [Video of the CPU running on the Basys 3](https://youtu.be/fxQB4NonvsM)
 
 ## Status
 
@@ -92,7 +92,6 @@ vvp core_sim
 gtkwave core.vcd
 ```
 
-<!-- Adjust the paths and file names to match your repo -->
 
 ## Building for the Basys 3
 
