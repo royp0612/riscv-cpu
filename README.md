@@ -3,8 +3,7 @@
 A single-cycle 32-bit RISC-V (RV32I) processor designed from scratch in SystemVerilog, verified in simulation with self-checking testbenches, and deployed on a Xilinx Artix-7 FPGA (Digilent Basys 3).
 
 <!-- Replace with your demo video or GIF -->
-**Demo:** [Video of the CPU running on the Basys 3](https://youtu.be/fxQB4NonvsM)
-
+[![Demo video of the RISC-V CPU running on the Basys 3](https://img.youtube.com/vi/fxQB4NonvsM/0.jpg)](https://youtu.be/fxQB4NonvsM)
 ## Status
 
 - [x] All 37 RV32I base integer instructions implemented
