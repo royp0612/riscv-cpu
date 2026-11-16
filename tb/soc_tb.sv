@@ -6,7 +6,7 @@ module soc_tb;
     logic [15:0] sw = 16'hA55A;
     logic [15:0] led;
 
-    soc dut (
+    soc #(.INIT_FILE("programs/demo.hex")) dut (
         .clk   (clk),
         .reset (reset),
         .sw    (sw),

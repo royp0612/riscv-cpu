@@ -1,4 +1,6 @@
-module soc(
+module soc #(
+    parameter INIT_FILE = "sw/prog.hex"
+)(
     input logic clk,
     input logic reset,
     input logic[15:0] sw,
@@ -26,7 +28,7 @@ module soc(
         .data_byte_en (data_byte_en)
     );
 
-    imem imem_inst (
+    imem #(.INIT_FILE(INIT_FILE)) imem_inst (
         .addr  (instr_addr),
         .instr (instr)
     );

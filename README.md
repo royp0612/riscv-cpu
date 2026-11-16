@@ -79,6 +79,17 @@ Inputs from the board (reset button, switches) pass through two-flip-flop synchr
 
 ## Running the Simulations
 
+Instruction memory loads `sw/prog.hex` by default. Build it with `make -C sw`
+using the RISC-V toolchain, then run simulations from the repository root.
+The `INIT_FILE` parameter on `soc` and `imem` selects another program file.
+Unused instruction words are initialized to NOPs. The instruction memory holds
+1024 words (4 KB); the hex file must fit in that space.
+
+The regression's instruction-memory and SoC tests select `programs/demo.hex`,
+so they do not depend on generated C program output. For Vivado, add the selected
+hex file as a memory initialization source and ensure `INIT_FILE` resolves to it
+in the build working directory. Rebuild the FPGA bitstream after changing it.
+
 Requires [Icarus Verilog](https://bleyer.org/icarus/) and GTKWave.
 
 ```bash

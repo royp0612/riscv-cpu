@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 module imem_tb; 
     logic [31:0] addr, instr;
-    imem dut(
+    imem #(.INIT_FILE("programs/demo.hex")) dut(
         .addr(addr),
         .instr(instr)
     );
