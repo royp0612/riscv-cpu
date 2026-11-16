@@ -1,5 +1,5 @@
 module soc #(
-    parameter INIT_FILE = "sw/prog.hex"
+    parameter INIT_FILE = "C:/Users/melon/OneDrive/Documents/riscv-cpu/sw/prog.hex"
 )(
     input logic clk,
     input logic reset,

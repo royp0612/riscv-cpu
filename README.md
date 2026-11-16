@@ -12,7 +12,7 @@ A single-cycle 32-bit RISC-V (RV32I) processor designed from scratch in SystemVe
 - [x] Full core verified with test programs (arithmetic, loads/stores, branch loops, JAL/JALR)
 - [x] System-on-chip with instruction/data memory and memory-mapped I/O
 - [x] Running on a Basys 3 at 50 MHz
-- [ ] RISC-V GCC toolchain: C programs running on the CPU
+- [] RISC-V GCC toolchain: C programs running on the CPU
 - [ ] Official `riscv-tests` (rv32ui) suite
 - [ ] UART output ("Hello, RISC-V!")
 - [ ] 5-stage pipeline with forwarding and hazard detection
@@ -91,6 +91,18 @@ hex file as a memory initialization source and ensure `INIT_FILE` resolves to it
 in the build working directory. Rebuild the FPGA bitstream after changing it.
 
 Requires [Icarus Verilog](https://bleyer.org/icarus/) and GTKWave.
+
+## Running C Programs
+
+C code in `sw/` is compiled with the RISC-V GCC toolchain into RV32I machine code and loaded into instruction memory.
+
+```bash
+cd sw
+make          # main.c → prog.elf → prog.bin → prog.hex
+make dump     # view the generated assembly
+```
+
+`crt0.S` sets up the stack and calls `main()`, and `link.ld` places the code at address 0, where the CPU starts after reset. `tb/program_tb.sv` runs the compiled program on the full SoC and checks the LEDs follow the switches.
 
 ```bash
 # ALU testbench

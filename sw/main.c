@@ -3,6 +3,6 @@
 
 int main(void) {
     while (1) {
-        LEDS = SWITCHES;
+        LEDS = ~SWITCHES;
     }
 }
