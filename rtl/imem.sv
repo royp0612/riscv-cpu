@@ -9,8 +9,6 @@ module imem #(
     initial begin
         for (int i = 0; i < 1024; i++)
             rom[i] = 32'h00000013;
-
-        // Paths are relative to the simulation/build working directory.
         $readmemh(INIT_FILE, rom);
     end
 

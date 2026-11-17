@@ -9,7 +9,7 @@ prog.hex: prog.bin
 prog.bin: prog.elf
 	$(OBJCOPY) -O binary prog.elf prog.bin
 
-prog.elf: crt0.S main.c link.ld
+prog.elf: crt0.S main.c uart.h link.ld
 	$(CC) $(CFLAGS) crt0.S main.c -o prog.elf
 
 dump: prog.elf

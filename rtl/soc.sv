@@ -1,10 +1,12 @@
 module soc #(
-    parameter INIT_FILE = "C:/Users/melon/OneDrive/Documents/riscv-cpu/sw/prog.hex"
+    parameter INIT_FILE = "C:/Users/melon/OneDrive/Documents/riscv-cpu/sw/prog.hex",
+    parameter int UART_CLOCKS_PER_BIT = 434
 )(
     input logic clk,
     input logic reset,
     input logic[15:0] sw,
-    output logic [15:0] led
+    output logic [15:0] led,
+    output logic uart_tx
 );
     logic [31:0] instr_addr, instr;
     logic [31:0] data_addr, data_write, data_read;
@@ -12,6 +14,20 @@ module soc #(
     logic [3:0] data_byte_en;
     logic [31:0] dmem_rdata;
     logic is_mmio;
+    logic uart_start, uart_busy;
+
+    
+    assign uart_start = !reset && mem_write && data_byte_en[0] &&
+                        data_addr[31:2] == (32'h10000014 >> 2) && !uart_busy;
+
+    uart_tx #(.CLOCKS_PER_BIT(UART_CLOCKS_PER_BIT)) uart_inst (
+        .clk(clk),
+        .reset(reset),
+        .start(uart_start),
+        .data(data_write[7:0]),
+        .tx(uart_tx),
+        .busy(uart_busy)
+    );
 
     assign is_mmio = (data_addr[31:28] == 4'h1);
 
@@ -50,6 +66,9 @@ module soc #(
         else if (mem_read &&
                 data_addr[31:2] == (32'h10000010 >> 2))
             data_read = {16'd0, sw};
+        else if (mem_read &&
+                data_addr[31:2] == (32'h10000018 >> 2))
+            data_read = {31'd0, uart_busy};
     end
     always_ff @(posedge clk) begin
         if (reset)

@@ -1,10 +1,11 @@
 module top(
     input logic clk,
-    input logic btnC, //this is reset
+    input logic btnC, 
     input logic [15:0] sw,
-    output logic [15:0] led
+    output logic [15:0] led,
+    output logic uart_tx
 );
-    // 50 MHz clock for the CPU
+    
     logic cpu_clk, locked;
 
     clk_wiz_0 clk_inst (
@@ -44,7 +45,8 @@ module top(
         .clk   (cpu_clk),
         .reset (reset),
         .sw    (sw_sync),
-        .led   (led)
+        .led   (led),
+        .uart_tx(uart_tx)
     );
 
 endmodule

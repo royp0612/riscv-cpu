@@ -46,8 +46,20 @@ Each instruction completes in one clock cycle: fetch, decode, execute, memory ac
 | --- | --- | --- |
 | `0x1000_000C` | LEDs (16 bits, byte-enable aware) | write |
 | `0x1000_0010` | Switches (16 bits) | read |
+| `0x1000_0014` | UART TX (low byte, writes while busy ignored) | write |
+| `0x1000_0018` | UART status (bit 0: busy) | read |
 
 The CPU talks to hardware with ordinary `lw`/`sw` instructions; `soc.sv` decodes the address and routes the access to memory or to the device.
+
+UART transmit uses 115200 baud, 8 data bits, no parity, one stop bit at the
+50 MHz CPU clock (434 clocks per bit). Include `uart.h` from `sw/main.c` and
+call `uart_putc('H');` to send a character. Polling in that helper prevents
+overwriting an active transmission. String literals still require data-memory
+initialization support; individual character calls work with the current linker.
+The `uart_tx` output is exposed through `top.sv` and mapped to pin A18 by
+`Basys-3-Master.xdc` for the USB-UART connection. Update your Vivado constraints
+to include that line before generating a hardware bitstream.
+Run `python scripts/regress.py uart` to test the transmitter and SoC integration.
 
 ## Verification
 
