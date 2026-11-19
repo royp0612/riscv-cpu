@@ -1,6 +1,8 @@
 `timescale 1ns/1ps
 
 module core_pipeline_tb;
+    localparam logic [31:0] NOP = 32'h00000013;
+
     logic clk = 0;
     logic reset = 1;
     logic [31:0] instr_addr, instr;
@@ -23,6 +25,14 @@ module core_pipeline_tb;
 
     always #5 clk = ~clk;
 
+    function automatic logic [31:0] encode_addi(
+        input logic [4:0] rd,
+        input logic [4:0] rs1,
+        input logic [11:0] imm
+    );
+        return {imm, rs1, 3'b000, rd, cpu_pkg::OP_I};
+    endfunction
+
     always_comb begin
         case (instr_addr)
             32'd0:  instr = 32'h00500093; // addi x1, x0, 5
@@ -30,6 +40,30 @@ module core_pipeline_tb;
             32'd8:  instr = 32'h00c00193; // addi x3, x0, 12
             32'd12: instr = 32'h00700013; // addi x0, x0, 7
             32'd20: instr = 32'h00208213; // addi x4, x1, 2
+
+            // Adjacent dependency uses EX/MEM forwarding.
+            32'd28: instr = encode_addi(5'd5, 5'd0, 12'd10);
+            32'd32: instr = encode_addi(5'd6, 5'd5, 12'd1);
+
+            // One NOP moves the producer to MEM/WB during Execute.
+            32'd36: instr = encode_addi(5'd5, 5'd0, 12'd20);
+            32'd40: instr = NOP;
+            32'd44: instr = encode_addi(5'd6, 5'd5, 12'd1);
+
+            // Two NOPs make Decode and Writeback use x5 on the same edge.
+            32'd48: instr = encode_addi(5'd5, 5'd0, 12'd30);
+            32'd52, 32'd56: instr = NOP;
+            32'd60: instr = encode_addi(5'd6, 5'd5, 12'd1);
+
+            // Both forwarding stages match x5. The newer value wins.
+            32'd64: instr = encode_addi(5'd5, 5'd0, 12'd40);
+            32'd68: instr = encode_addi(5'd5, 5'd0, 12'd50);
+            32'd72: instr = encode_addi(5'd6, 5'd5, 12'd1);
+
+            // Writes targeting x0 cannot affect the forwarded operand.
+            32'd76: instr = encode_addi(5'd0, 5'd0, 12'd7);
+            32'd80: instr = encode_addi(5'd0, 5'd0, 12'd9);
+            32'd84: instr = encode_addi(5'd6, 5'd0, 12'd1);
             default: instr = 32'd0;      // Unsupported encoding creates a bubble.
         endcase
     end
@@ -68,7 +102,28 @@ module core_pipeline_tb;
         expect_retirement(32'd20, 5'd4, 32'd7);
         expect_bubble();
 
-        $display("PASS: ADDI pipeline fills, retires in order, and writes the register file");
+        expect_retirement(32'd28, 5'd5, 32'd10);
+        expect_retirement(32'd32, 5'd6, 32'd11);
+
+        expect_retirement(32'd36, 5'd5, 32'd20);
+        expect_retirement(32'd40, 5'd0, 32'd0);
+        expect_retirement(32'd44, 5'd6, 32'd21);
+
+        expect_retirement(32'd48, 5'd5, 32'd30);
+        expect_retirement(32'd52, 5'd0, 32'd0);
+        expect_retirement(32'd56, 5'd0, 32'd0);
+        expect_retirement(32'd60, 5'd6, 32'd31);
+
+        expect_retirement(32'd64, 5'd5, 32'd40);
+        expect_retirement(32'd68, 5'd5, 32'd50);
+        expect_retirement(32'd72, 5'd6, 32'd51);
+
+        expect_retirement(32'd76, 5'd0, 32'd0);
+        expect_retirement(32'd80, 5'd0, 32'd0);
+        expect_retirement(32'd84, 5'd6, 32'd1);
+        expect_bubble();
+
+        $display("PASS: ADDI retirement, EX/MEM and MEM/WB forwarding, Decode bypass, and x0 protection");
         $finish;
     end
 endmodule

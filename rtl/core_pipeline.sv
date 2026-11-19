@@ -24,6 +24,7 @@ module core_pipeline (
         logic        valid;
         logic [31:0] pc;
         logic [4:0]  rd;
+        logic [4:0]  rs1;
         logic [31:0] rs1_value;
         logic [31:0] imm;
     } decode_execute_t;
@@ -41,6 +42,7 @@ module core_pipeline (
 
     logic        decode_addi;
     logic [31:0] decode_rs1, decode_imm, execute_result;
+    logic [31:0] alu_a, decode_rs1_bypassed;
 
     // Fetch advances every cycle for this straight-line ADDI milestone.
     pc pc_inst (
@@ -72,10 +74,27 @@ module core_pipeline (
 
     alu alu_inst (
         .op(cpu_pkg::ALU_ADD),
-        .a(id_ex.rs1_value),
+        .a(alu_a),
         .b(id_ex.imm),
         .y(execute_result)
     );
+
+    always_comb begin
+        alu_a = id_ex.rs1_value;
+
+        if (mem_wb.valid && mem_wb.rd != 5'd0 && mem_wb.rd == id_ex.rs1)
+            alu_a = mem_wb.result;
+
+        // The newer EX/MEM result takes priority when both stages match.
+        if (ex_mem.valid && ex_mem.rd != 5'd0 && ex_mem.rd == id_ex.rs1)
+            alu_a = ex_mem.result;
+    end
+
+    always_comb begin
+        decode_rs1_bypassed = decode_rs1;
+        if (retire_rd_we && retire_rd == if_id.instr[19:15])
+            decode_rs1_bypassed = retire_rd_data;
+    end
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -85,10 +104,13 @@ module core_pipeline (
             mem_wb <= '0;
         end else begin
             if_id <= {1'b1, instr_addr, instr};
-            id_ex <= {if_id.valid && decode_addi, if_id.pc, if_id.instr[11:7],
-                      decode_rs1, decode_imm};
+            id_ex <= {if_id.valid && decode_addi,
+                      if_id.pc,
+                      if_id.instr[11:7],   // rd
+                      if_id.instr[19:15],  // rs1
+                      decode_rs1_bypassed,
+                      decode_imm};
             ex_mem <= {id_ex.valid, id_ex.pc, id_ex.rd, execute_result};
-            // ADDI passes through Memory on its way to Writeback.
             mem_wb <= ex_mem;
         end
     end
