@@ -2,6 +2,7 @@
 
 module core_pipeline_tb;
     localparam logic [31:0] NOP = 32'h00000013;
+    localparam logic [31:0] RS2_CHECK_PC = 32'd20;
 
     logic clk = 0;
     logic reset = 1;
@@ -9,6 +10,7 @@ module core_pipeline_tb;
     logic retire_valid, retire_rd_we;
     logic [31:0] retire_pc, retire_rd_data;
     logic [4:0] retire_rd;
+    bit rs2_checked;
 
     core_pipeline dut (
         .clk(clk),
@@ -39,7 +41,7 @@ module core_pipeline_tb;
             32'd4:  instr = 32'hffd00113; // addi x2, x0, -3
             32'd8:  instr = 32'h00c00193; // addi x3, x0, 12
             32'd12: instr = 32'h00700013; // addi x0, x0, 7
-            32'd20: instr = 32'h00208213; // addi x4, x1, 2
+            RS2_CHECK_PC: instr = 32'h00208213; // addi x4, x1, 2
 
             // Adjacent dependency uses EX/MEM forwarding.
             32'd28: instr = encode_addi(5'd5, 5'd0, 12'd10);
@@ -89,6 +91,16 @@ module core_pipeline_tb;
             $fatal(1, "PC %h: expected %h, got %h", expected_pc, expected_data, retire_rd_data);
     endtask
 
+    // The low immediate bits select x2 on the second read port. x2 already holds -3.
+    always @(negedge clk) begin
+        if (!reset && dut.id_ex.valid && dut.id_ex.pc == RS2_CHECK_PC) begin
+            if (dut.id_ex.rs2 !== 5'd2 || dut.id_ex.rs2_value !== 32'hfffffffd)
+                $fatal(1, "ID/EX expected rs2 = x2 and value -3, got rs2 = x%0d and value %h",
+                       dut.id_ex.rs2, dut.id_ex.rs2_value);
+            rs2_checked = 1'b1;
+        end
+    end
+
     initial begin
         repeat (2) @(negedge clk);
         reset = 0;
@@ -99,7 +111,7 @@ module core_pipeline_tb;
         expect_retirement(32'd8,  5'd3, 32'd12);
         expect_retirement(32'd12, 5'd0, 32'd0);
         expect_bubble();
-        expect_retirement(32'd20, 5'd4, 32'd7);
+        expect_retirement(RS2_CHECK_PC, 5'd4, 32'd7);
         expect_bubble();
 
         expect_retirement(32'd28, 5'd5, 32'd10);
@@ -123,6 +135,9 @@ module core_pipeline_tb;
         expect_retirement(32'd84, 5'd6, 32'd1);
         expect_bubble();
 
+        if (!rs2_checked)
+            $fatal(1, "The rs2 capture check never ran");
+        $display("PASS: ID/EX captures the rs2 register number and read value");
         $display("PASS: ADDI retirement, EX/MEM and MEM/WB forwarding, Decode bypass, and x0 protection");
         $finish;
     end

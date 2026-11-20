@@ -25,7 +25,9 @@ module core_pipeline (
         logic [31:0] pc;
         logic [4:0]  rd;
         logic [4:0]  rs1;
+        logic [4:0]  rs2;
         logic [31:0] rs1_value;
+        logic [31:0] rs2_value;
         logic [31:0] imm;
     } decode_execute_t;
 
@@ -41,7 +43,7 @@ module core_pipeline (
     execute_result_t ex_mem, mem_wb;
 
     logic        decode_addi;
-    logic [31:0] decode_rs1, decode_imm, execute_result;
+    logic [31:0] decode_rs1, decode_rs2, decode_imm, execute_result;
     logic [31:0] alu_a, decode_rs1_bypassed;
 
     // Fetch advances every cycle for this straight-line ADDI milestone.
@@ -65,11 +67,11 @@ module core_pipeline (
         .clk(clk),
         .we(retire_rd_we),
         .rs1(if_id.instr[19:15]),
-        .rs2(5'd0),
+        .rs2(if_id.instr[24:20]),
         .rd(retire_rd),
         .wd(retire_rd_data),
         .rd1(decode_rs1),
-        .rd2()
+        .rd2(decode_rs2)
     );
 
     alu alu_inst (
@@ -107,8 +109,11 @@ module core_pipeline (
             id_ex <= {if_id.valid && decode_addi,
                       if_id.pc,
                       if_id.instr[11:7],   // rd
+                      
                       if_id.instr[19:15],  // rs1
+                      if_id.instr[24:20],
                       decode_rs1_bypassed,
+                      decode_rs2,
                       decode_imm};
             ex_mem <= {id_ex.valid, id_ex.pc, id_ex.rd, execute_result};
             mem_wb <= ex_mem;
