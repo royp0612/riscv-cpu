@@ -35,6 +35,14 @@ module core_pipeline_tb;
         return {imm, rs1, 3'b000, rd, cpu_pkg::OP_I};
     endfunction
 
+    function automatic logic [31:0] encode_add(
+        input logic [4:0] rd,
+        input logic [4:0] rs1,
+        input logic [4:0] rs2
+    );
+        return {7'b0000000, rs2, rs1, 3'b000, rd, cpu_pkg::OP_R};
+    endfunction
+
     always_comb begin
         case (instr_addr)
             32'd0:  instr = 32'h00500093; // addi x1, x0, 5
@@ -66,6 +74,21 @@ module core_pipeline_tb;
             32'd76: instr = encode_addi(5'd0, 5'd0, 12'd7);
             32'd80: instr = encode_addi(5'd0, 5'd0, 12'd9);
             32'd84: instr = encode_addi(5'd6, 5'd0, 12'd1);
+
+            // ADD gets rs1 from MEM/WB and rs2 from EX/MEM on the same cycle.
+            32'd88: instr = encode_addi(5'd7, 5'd0, 12'd5);
+            32'd92: instr = encode_addi(5'd8, 5'd0, 12'd7);
+            32'd96: instr = encode_add(5'd9, 5'd7, 5'd8);
+
+            // One NOP exercises MEM/WB forwarding for rs2.
+            32'd100: instr = encode_addi(5'd8, 5'd0, 12'd9);
+            32'd104: instr = NOP;
+            32'd108: instr = encode_add(5'd9, 5'd7, 5'd8);
+
+            // Two NOPs exercise the Writeback-to-Decode bypass for rs2.
+            32'd112: instr = encode_addi(5'd8, 5'd0, 12'd11);
+            32'd116, 32'd120: instr = NOP;
+            32'd124: instr = encode_add(5'd9, 5'd7, 5'd8);
             default: instr = 32'd0;      // Unsupported encoding creates a bubble.
         endcase
     end
@@ -133,12 +156,26 @@ module core_pipeline_tb;
         expect_retirement(32'd76, 5'd0, 32'd0);
         expect_retirement(32'd80, 5'd0, 32'd0);
         expect_retirement(32'd84, 5'd6, 32'd1);
+
+        expect_retirement(32'd88, 5'd7, 32'd5);
+        expect_retirement(32'd92, 5'd8, 32'd7);
+        expect_retirement(32'd96, 5'd9, 32'd12);
+
+        expect_retirement(32'd100, 5'd8, 32'd9);
+        expect_retirement(32'd104, 5'd0, 32'd0);
+        expect_retirement(32'd108, 5'd9, 32'd14);
+
+        expect_retirement(32'd112, 5'd8, 32'd11);
+        expect_retirement(32'd116, 5'd0, 32'd0);
+        expect_retirement(32'd120, 5'd0, 32'd0);
+        expect_retirement(32'd124, 5'd9, 32'd16);
         expect_bubble();
 
         if (!rs2_checked)
             $fatal(1, "The rs2 capture check never ran");
         $display("PASS: ID/EX captures the rs2 register number and read value");
         $display("PASS: ADDI retirement, EX/MEM and MEM/WB forwarding, Decode bypass, and x0 protection");
+        $display("PASS: ADD retirement with rs2 forwarding and Decode bypass");
         $finish;
     end
 endmodule

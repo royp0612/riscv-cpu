@@ -29,6 +29,7 @@ module core_pipeline (
         logic [31:0] rs1_value;
         logic [31:0] rs2_value;
         logic [31:0] imm;
+        logic        use_rs2;
     } decode_execute_t;
 
     typedef struct packed {
@@ -42,11 +43,12 @@ module core_pipeline (
     decode_execute_t id_ex;
     execute_result_t ex_mem, mem_wb;
 
-    logic        decode_addi;
+    logic        decode_addi, decode_add;
     logic [31:0] decode_rs1, decode_rs2, decode_imm, execute_result;
     logic [31:0] alu_a, decode_rs1_bypassed;
+    logic [31:0] execute_rs2, decode_rs2_bypassed;
 
-    // Fetch advances every cycle for this straight-line ADDI milestone.
+    // Fetch advances every cycle for straight-line execution.
     pc pc_inst (
         .clk(clk),
         .reset(reset),
@@ -56,6 +58,9 @@ module core_pipeline (
 
     assign decode_addi = if_id.instr[6:0] == cpu_pkg::OP_I &&
                          if_id.instr[14:12] == 3'b000;
+    assign decode_add = if_id.instr[6:0]   == cpu_pkg::OP_R &&
+                        if_id.instr[14:12] == 3'b000 &&
+                        if_id.instr[31:25] == 7'b0000000;
 
     imm_gen imm_inst (
         .instr(if_id.instr),
@@ -77,7 +82,7 @@ module core_pipeline (
     alu alu_inst (
         .op(cpu_pkg::ALU_ADD),
         .a(alu_a),
-        .b(id_ex.imm),
+        .b(id_ex.use_rs2 ? execute_rs2 : id_ex.imm),
         .y(execute_result)
     );
 
@@ -93,10 +98,23 @@ module core_pipeline (
     end
 
     always_comb begin
+        execute_rs2 = id_ex.rs2_value;
+
+        if (ex_mem.valid && ex_mem.rd != 5'd0 && ex_mem.rd == id_ex.rs2)
+            execute_rs2 = ex_mem.result;
+        else if (retire_rd_we && retire_rd == id_ex.rs2)
+            execute_rs2 = retire_rd_data;
+    end
+
+    always_comb begin
         decode_rs1_bypassed = decode_rs1;
         if (retire_rd_we && retire_rd == if_id.instr[19:15])
             decode_rs1_bypassed = retire_rd_data;
     end
+
+    assign decode_rs2_bypassed =
+        (retire_rd_we && retire_rd == if_id.instr[24:20])
+            ? retire_rd_data : decode_rs2;
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -106,15 +124,15 @@ module core_pipeline (
             mem_wb <= '0;
         end else begin
             if_id <= {1'b1, instr_addr, instr};
-            id_ex <= {if_id.valid && decode_addi,
+            id_ex <= {if_id.valid && (decode_addi || decode_add),
                       if_id.pc,
                       if_id.instr[11:7],   // rd
-                      
                       if_id.instr[19:15],  // rs1
                       if_id.instr[24:20],
                       decode_rs1_bypassed,
-                      decode_rs2,
-                      decode_imm};
+                      decode_rs2_bypassed,
+                      decode_imm,
+                      decode_add};
             ex_mem <= {id_ex.valid, id_ex.pc, id_ex.rd, execute_result};
             mem_wb <= ex_mem;
         end
