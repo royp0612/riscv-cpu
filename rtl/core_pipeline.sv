@@ -30,6 +30,7 @@ module core_pipeline (
         logic [31:0] rs2_value;
         logic [31:0] imm;
         logic        use_rs2;
+        logic [3:0]  alu_op;
     } decode_execute_t;
 
     typedef struct packed {
@@ -43,7 +44,8 @@ module core_pipeline (
     decode_execute_t id_ex;
     execute_result_t ex_mem, mem_wb;
 
-    logic        decode_addi, decode_add;
+    logic [3:0]  decode_alu_op;
+    logic        decode_alu_src, decode_valid, decode_supported;
     logic [31:0] decode_rs1, decode_rs2, decode_imm, execute_result;
     logic [31:0] alu_a, decode_rs1_bypassed;
     logic [31:0] execute_rs2, decode_rs2_bypassed;
@@ -56,11 +58,18 @@ module core_pipeline (
         .pc_out(instr_addr)
     );
 
-    assign decode_addi = if_id.instr[6:0] == cpu_pkg::OP_I &&
-                         if_id.instr[14:12] == 3'b000;
-    assign decode_add = if_id.instr[6:0]   == cpu_pkg::OP_R &&
-                        if_id.instr[14:12] == 3'b000 &&
-                        if_id.instr[31:25] == 7'b0000000;
+    decoder decoder_inst (
+        .instr(if_id.instr),
+        .alu_op(decode_alu_op),
+        .alu_src(decode_alu_src),
+        .valid(decode_valid)
+    );
+
+    // ADD, ADDI, and SUB all use funct3 == 000.
+    assign decode_supported = decode_valid &&
+                              if_id.instr[14:12] == 3'b000 &&
+                              (if_id.instr[6:0] == cpu_pkg::OP_R ||
+                               if_id.instr[6:0] == cpu_pkg::OP_I);
 
     imm_gen imm_inst (
         .instr(if_id.instr),
@@ -80,7 +89,7 @@ module core_pipeline (
     );
 
     alu alu_inst (
-        .op(cpu_pkg::ALU_ADD),
+        .op(id_ex.alu_op),
         .a(alu_a),
         .b(id_ex.use_rs2 ? execute_rs2 : id_ex.imm),
         .y(execute_result)
@@ -124,7 +133,7 @@ module core_pipeline (
             mem_wb <= '0;
         end else begin
             if_id <= {1'b1, instr_addr, instr};
-            id_ex <= {if_id.valid && (decode_addi || decode_add),
+            id_ex <= {if_id.valid && decode_supported,
                       if_id.pc,
                       if_id.instr[11:7],   // rd
                       if_id.instr[19:15],  // rs1
@@ -132,7 +141,8 @@ module core_pipeline (
                       decode_rs1_bypassed,
                       decode_rs2_bypassed,
                       decode_imm,
-                      decode_add};
+                      !decode_alu_src,
+                      decode_alu_op};
             ex_mem <= {id_ex.valid, id_ex.pc, id_ex.rd, execute_result};
             mem_wb <= ex_mem;
         end

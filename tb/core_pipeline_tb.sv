@@ -89,6 +89,12 @@ module core_pipeline_tb;
             32'd112: instr = encode_addi(5'd8, 5'd0, 12'd11);
             32'd116, 32'd120: instr = NOP;
             32'd124: instr = encode_add(5'd9, 5'd7, 5'd8);
+
+            // SUB uses forwarded operands, then forwards its own result to ADDI.
+            32'd128: instr = encode_addi(5'd10, 5'd0, 12'd9);
+            32'd132: instr = encode_addi(5'd11, 5'd0, 12'd4);
+            32'd136: instr = 32'h40b50633; // sub x12, x10, x11
+            32'd140: instr = encode_addi(5'd13, 5'd12, 12'd1);
             default: instr = 32'd0;      // Unsupported encoding creates a bubble.
         endcase
     end
@@ -169,6 +175,11 @@ module core_pipeline_tb;
         expect_retirement(32'd116, 5'd0, 32'd0);
         expect_retirement(32'd120, 5'd0, 32'd0);
         expect_retirement(32'd124, 5'd9, 32'd16);
+
+        expect_retirement(32'd128, 5'd10, 32'd9);
+        expect_retirement(32'd132, 5'd11, 32'd4);
+        expect_retirement(32'd136, 5'd12, 32'd5);
+        expect_retirement(32'd140, 5'd13, 32'd6);
         expect_bubble();
 
         if (!rs2_checked)
@@ -176,6 +187,7 @@ module core_pipeline_tb;
         $display("PASS: ID/EX captures the rs2 register number and read value");
         $display("PASS: ADDI retirement, EX/MEM and MEM/WB forwarding, Decode bypass, and x0 protection");
         $display("PASS: ADD retirement with rs2 forwarding and Decode bypass");
+        $display("PASS: SUB uses forwarded operands and forwards its result to ADDI");
         $finish;
     end
 endmodule
