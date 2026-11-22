@@ -95,6 +95,30 @@ module core_pipeline_tb;
             32'd132: instr = encode_addi(5'd11, 5'd0, 12'd4);
             32'd136: instr = 32'h40b50633; // sub x12, x10, x11
             32'd140: instr = encode_addi(5'd13, 5'd12, 12'd1);
+
+            // A negative operand distinguishes signed compares and right shifts.
+            // The register shift count of 35 also checks that only its low five bits are used.
+            32'd144: instr = encode_addi(5'd14, 5'd0, 12'hff1); // x14 = -15
+            32'd148: instr = encode_addi(5'd15, 5'd0, 12'd35);  // x15 = 35
+            32'd152: instr = 32'h00f71833; // sll  x16, x14, x15
+            32'd156: instr = 32'h00f72833; // slt  x16, x14, x15
+            32'd160: instr = 32'h00f73833; // sltu x16, x14, x15
+            32'd164: instr = 32'h00f74833; // xor  x16, x14, x15
+            32'd168: instr = 32'h00f75833; // srl  x16, x14, x15
+            32'd172: instr = 32'h40f75833; // sra  x16, x14, x15
+            32'd176: instr = 32'h00f76833; // or   x16, x14, x15
+            32'd180: instr = 32'h00f77833; // and  x16, x14, x15
+
+            32'd184: instr = 32'h00371813; // slli  x16, x14, 3
+            32'd188: instr = 32'h00372813; // slti  x16, x14, 3
+            32'd192: instr = 32'h00373813; // sltiu x16, x14, 3
+            32'd196: instr = 32'hffe74813; // xori  x16, x14, -2
+            32'd200: instr = 32'h00375813; // srli  x16, x14, 3
+            32'd204: instr = 32'h40375813; // srai  x16, x14, 3
+            32'd208: instr = 32'h00376813; // ori   x16, x14, 3
+            32'd212: instr = 32'h00377813; // andi  x16, x14, 3
+            32'd216: instr = 32'hfff73813; // sltiu x16, x14, -1
+            32'd220: instr = 32'h02371813; // Reserved RV32I shift-immediate encoding.
             default: instr = 32'd0;      // Unsupported encoding creates a bubble.
         endcase
     end
@@ -180,6 +204,28 @@ module core_pipeline_tb;
         expect_retirement(32'd132, 5'd11, 32'd4);
         expect_retirement(32'd136, 5'd12, 32'd5);
         expect_retirement(32'd140, 5'd13, 32'd6);
+
+        expect_retirement(32'd144, 5'd14, 32'hfffffff1);
+        expect_retirement(32'd148, 5'd15, 32'd35);
+        expect_retirement(32'd152, 5'd16, 32'hffffff88);
+        expect_retirement(32'd156, 5'd16, 32'd1);
+        expect_retirement(32'd160, 5'd16, 32'd0);
+        expect_retirement(32'd164, 5'd16, 32'hffffffd2);
+        expect_retirement(32'd168, 5'd16, 32'h1ffffffe);
+        expect_retirement(32'd172, 5'd16, 32'hfffffffe);
+        expect_retirement(32'd176, 5'd16, 32'hfffffff3);
+        expect_retirement(32'd180, 5'd16, 32'h00000021);
+
+        expect_retirement(32'd184, 5'd16, 32'hffffff88);
+        expect_retirement(32'd188, 5'd16, 32'd1);
+        expect_retirement(32'd192, 5'd16, 32'd0);
+        expect_retirement(32'd196, 5'd16, 32'h0000000f);
+        expect_retirement(32'd200, 5'd16, 32'h1ffffffe);
+        expect_retirement(32'd204, 5'd16, 32'hfffffffe);
+        expect_retirement(32'd208, 5'd16, 32'hfffffff3);
+        expect_retirement(32'd212, 5'd16, 32'h00000001);
+        expect_retirement(32'd216, 5'd16, 32'd1);
+        expect_bubble(); // Reserved shift-immediate encoding.
         expect_bubble();
 
         if (!rs2_checked)
@@ -188,6 +234,7 @@ module core_pipeline_tb;
         $display("PASS: ADDI retirement, EX/MEM and MEM/WB forwarding, Decode bypass, and x0 protection");
         $display("PASS: ADD retirement with rs2 forwarding and Decode bypass");
         $display("PASS: SUB uses forwarded operands and forwards its result to ADDI");
+        $display("PASS: register and immediate shifts, comparisons, and bitwise operations");
         $finish;
     end
 endmodule

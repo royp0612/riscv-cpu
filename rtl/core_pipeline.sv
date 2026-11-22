@@ -65,9 +65,7 @@ module core_pipeline (
         .valid(decode_valid)
     );
 
-    // ADD, ADDI, and SUB all use funct3 == 000.
     assign decode_supported = decode_valid &&
-                              if_id.instr[14:12] == 3'b000 &&
                               (if_id.instr[6:0] == cpu_pkg::OP_R ||
                                if_id.instr[6:0] == cpu_pkg::OP_I);
 
