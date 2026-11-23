@@ -7,6 +7,9 @@ module core_pipeline_tb;
     logic clk = 0;
     logic reset = 1;
     logic [31:0] instr_addr, instr;
+    logic [31:0] data_addr, data_write, data_read;
+    logic mem_read, mem_write;
+    logic [3:0] data_byte_en;
     logic retire_valid, retire_rd_we;
     logic [31:0] retire_pc, retire_rd_data;
     logic [4:0] retire_rd;
@@ -17,12 +20,27 @@ module core_pipeline_tb;
         .reset(reset),
         .instr_addr(instr_addr),
         .instr(instr),
-        .data_read(32'd0),
+        .data_addr(data_addr),
+        .data_write(data_write),
+        .data_read(data_read),
+        .mem_read(mem_read),
+        .mem_write(mem_write),
+        .data_byte_en(data_byte_en),
         .retire_valid(retire_valid),
         .retire_pc(retire_pc),
         .retire_rd_we(retire_rd_we),
         .retire_rd(retire_rd),
         .retire_rd_data(retire_rd_data)
+    );
+
+    dmem dmem_inst (
+        .clk(clk),
+        .mem_read(mem_read),
+        .mem_write(mem_write),
+        .addr(data_addr),
+        .write_data(data_write),
+        .byte_en(data_byte_en),
+        .read_data(data_read)
     );
 
     always #5 clk = ~clk;
@@ -119,6 +137,25 @@ module core_pipeline_tb;
             32'd212: instr = 32'h00377813; // andi  x16, x14, 3
             32'd216: instr = 32'hfff73813; // sltiu x16, x14, -1
             32'd220: instr = 32'h02371813; // Reserved RV32I shift-immediate encoding.
+
+            // The dependent ADD takes LUI from MEM/WB and AUIPC from EX/MEM.
+            32'd224: instr = 32'h123458b7; // lui   x17, 0x12345
+            32'd228: instr = 32'h00001917; // auipc x18, 0x1
+            32'd232: instr = encode_add(5'd19, 5'd17, 5'd18);
+
+            // Forward store data. SW's offset bits must not look like a write to x4.
+            32'd236: instr = encode_addi(5'd20, 5'd0, 12'd42);
+            32'd240: instr = 32'h01402223; // sw x20, 4(x0)
+            32'd244: instr = encode_addi(5'd26, 5'd4, 12'd1);
+            32'd248: instr = 32'h00402a83; // lw x21, 4(x0)
+            32'd252: instr = encode_addi(5'd22, 5'd21, 12'd1);
+
+            // A store can depend on a load through rs2.
+            32'd256: instr = 32'h00402b83; // lw x23, 4(x0)
+            32'd260: instr = 32'h01702423; // sw x23, 8(x0)
+            32'd264: instr = 32'h00802c03; // lw x24, 8(x0)
+            // The immediate contains 24, so this ADDI has no dependency on x24.
+            32'd268: instr = encode_addi(5'd25, 5'd0, 12'd24);
             default: instr = 32'd0;      // Unsupported encoding creates a bubble.
         endcase
     end
@@ -137,7 +174,8 @@ module core_pipeline_tb;
         // Sample Writeback at the edge that commits the register write.
         @(posedge clk);
         if (retire_valid !== 1'b1 || retire_pc !== expected_pc ||
-            retire_rd !== expected_rd || retire_rd_we !== (expected_rd != 5'd0))
+            retire_rd_we !== (expected_rd != 5'd0) ||
+            (retire_rd_we && retire_rd !== expected_rd))
             $fatal(1, "Expected PC %h and rd x%0d, got PC %h, rd x%0d, valid=%b, we=%b",
                    expected_pc, expected_rd, retire_pc, retire_rd, retire_valid, retire_rd_we);
         if (retire_rd_we && retire_rd_data !== expected_data)
@@ -226,8 +264,27 @@ module core_pipeline_tb;
         expect_retirement(32'd212, 5'd16, 32'h00000001);
         expect_retirement(32'd216, 5'd16, 32'd1);
         expect_bubble(); // Reserved shift-immediate encoding.
+
+        expect_retirement(32'd224, 5'd17, 32'h12345000);
+        expect_retirement(32'd228, 5'd18, 32'h000010e4);
+        expect_retirement(32'd232, 5'd19, 32'h123460e4);
+
+        expect_retirement(32'd236, 5'd20, 32'd42);
+        expect_retirement(32'd240, 5'd0, 32'd0);
+        expect_retirement(32'd244, 5'd26, 32'd8);
+        expect_retirement(32'd248, 5'd21, 32'd42);
+        expect_bubble(); // LW to ADDI through rs1.
+        expect_retirement(32'd252, 5'd22, 32'd43);
+
+        expect_retirement(32'd256, 5'd23, 32'd42);
+        expect_bubble(); // LW to SW through rs2.
+        expect_retirement(32'd260, 5'd0, 32'd0);
+        expect_retirement(32'd264, 5'd24, 32'd42);
+        expect_retirement(32'd268, 5'd25, 32'd24);
         expect_bubble();
 
+        if (dmem_inst.mem[1] !== 32'd42 || dmem_inst.mem[2] !== 32'd42)
+            $fatal(1, "Expected SW to write 42 to both byte addresses 4 and 8");
         if (!rs2_checked)
             $fatal(1, "The rs2 capture check never ran");
         $display("PASS: ID/EX captures the rs2 register number and read value");
@@ -235,6 +292,8 @@ module core_pipeline_tb;
         $display("PASS: ADD retirement with rs2 forwarding and Decode bypass");
         $display("PASS: SUB uses forwarded operands and forwards its result to ADDI");
         $display("PASS: register and immediate shifts, comparisons, and bitwise operations");
+        $display("PASS: LUI, AUIPC at a nonzero PC, and forwarding their results");
+        $display("PASS: LW and SW through RAM, store-data forwarding, and one-cycle load-use stalls");
         $finish;
     end
 endmodule
