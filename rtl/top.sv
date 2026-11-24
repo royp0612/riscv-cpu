@@ -1,4 +1,6 @@
-module top(
+module top #(
+    parameter INIT_FILE = "sw/prog.hex"
+)(
     input logic clk,
     input logic btnC, 
     input logic [15:0] sw,
@@ -41,7 +43,7 @@ module top(
         end
     end
 
-    soc soc_inst (
+    soc #(.INIT_FILE(INIT_FILE)) soc_inst (
         .clk   (cpu_clk),
         .reset (reset),
         .sw    (sw_sync),

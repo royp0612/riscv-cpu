@@ -9,4 +9,7 @@ fe019ee3 // bne x3, x0, -4 (poll until idle)
 00208a23 // sb x2, 20(x1) (transmit i)
 0180a183 // lw x3, 24(x1)
 fe019ee3 // bne x3, x0, -4
+00000663 // beq x0, x0, 12 (skip both UART stores)
+00208a23 // sb x2, 20(x1) (wrong path)
+00208a23 // sb x2, 20(x1) (wrong path)
 0000006f // jal x0, 0

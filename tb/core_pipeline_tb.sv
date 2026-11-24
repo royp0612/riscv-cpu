@@ -156,6 +156,45 @@ module core_pipeline_tb;
             32'd264: instr = 32'h00802c03; // lw x24, 8(x0)
             // The immediate contains 24, so this ADDI has no dependency on x24.
             32'd268: instr = encode_addi(5'd25, 5'd0, 12'd24);
+
+            // Use 0x80ff7f01 to exercise signed and unsigned loads at an upper lane.
+            32'd272: instr = 32'h80ff8a37; // lui x20, 0x80ff8
+            32'd276: instr = encode_addi(5'd20, 5'd20, 12'hf01);
+            32'd280: instr = 32'h01402623; // sw  x20, 12(x0)
+            32'd284: instr = 32'h00e00a83; // lb  x21, 14(x0)
+            32'd288: instr = encode_addi(5'd22, 5'd21, 12'd1);
+            32'd292: instr = 32'h00e04a83; // lbu x21, 14(x0)
+            32'd296: instr = 32'h00e01a83; // lh  x21, 14(x0)
+            32'd300: instr = 32'h00e05a83; // lhu x21, 14(x0)
+            32'd304: instr = encode_addi(5'd22, 5'd0, 12'h055);
+            32'd308: instr = 32'h016006a3; // sb  x22, 13(x0)
+            32'd312: instr = 32'h00c02a83; // lw  x21, 12(x0)
+            32'd316: instr = encode_addi(5'd22, 5'd0, 12'h123);
+            32'd320: instr = 32'h01601723; // sh  x22, 14(x0)
+            32'd324: instr = 32'h00c02a83; // lw  x21, 12(x0)
+
+            // BLT uses two forwarded operands. BLTU falls through for the same values.
+            32'd328: instr = encode_addi(5'd20, 5'd0, 12'hfff);
+            32'd332: instr = encode_addi(5'd21, 5'd0, 12'd1);
+            32'd336: instr = 32'h015a4663; // blt  x20, x21, +12
+            32'd348: instr = 32'h014ad663; // bge  x21, x20, +12
+            32'd360: instr = 32'h015a6663; // bltu x20, x21, +12
+            32'd364: instr = 32'h015a7663; // bgeu x20, x21, +12
+            32'd376: instr = 32'h00000663; // beq  x0, x0, +12
+            32'd388: instr = 32'h00c02c03; // lw   x24, 12(x0)
+            32'd392: instr = 32'h000c1663; // bne  x24, x0, +12
+
+            32'd404: instr = 32'h00c00d6f; // jal  x26, +12
+            32'd416: instr = encode_addi(5'd27, 5'd26, 12'd0);
+            32'd420: instr = encode_addi(5'd28, 5'd0, 12'd437);
+            32'd424: instr = 32'h000e0ee7; // jalr x29, 0(x28) (target 436 after masking)
+            32'd436: instr = encode_addi(5'd30, 5'd29, 12'd0);
+
+            // Redirects must discard the store and register write on the wrong path.
+            32'd340, 32'd352, 32'd368, 32'd380, 32'd396, 32'd408, 32'd428:
+                instr = 32'h01402623; // sw x20, 12(x0)
+            32'd344, 32'd356, 32'd372, 32'd384, 32'd400, 32'd412, 32'd432:
+                instr = encode_addi(5'd21, 5'd0, 12'd99);
             default: instr = 32'd0;      // Unsupported encoding creates a bubble.
         endcase
     end
@@ -281,10 +320,51 @@ module core_pipeline_tb;
         expect_retirement(32'd260, 5'd0, 32'd0);
         expect_retirement(32'd264, 5'd24, 32'd42);
         expect_retirement(32'd268, 5'd25, 32'd24);
+
+        expect_retirement(32'd272, 5'd20, 32'h80ff8000);
+        expect_retirement(32'd276, 5'd20, 32'h80ff7f01);
+        expect_retirement(32'd280, 5'd0, 32'd0);
+        expect_retirement(32'd284, 5'd21, 32'hffffffff);
+        expect_bubble(); // LB to ADDI.
+        expect_retirement(32'd288, 5'd22, 32'd0);
+        expect_retirement(32'd292, 5'd21, 32'h000000ff);
+        expect_retirement(32'd296, 5'd21, 32'hffff80ff);
+        expect_retirement(32'd300, 5'd21, 32'h000080ff);
+        expect_retirement(32'd304, 5'd22, 32'h00000055);
+        expect_retirement(32'd308, 5'd0, 32'd0);
+        expect_retirement(32'd312, 5'd21, 32'h80ff5501);
+        expect_retirement(32'd316, 5'd22, 32'h00000123);
+        expect_retirement(32'd320, 5'd0, 32'd0);
+        expect_retirement(32'd324, 5'd21, 32'h01235501);
+
+        expect_retirement(32'd328, 5'd20, 32'hffffffff);
+        expect_retirement(32'd332, 5'd21, 32'd1);
+        expect_retirement(32'd336, 5'd0, 32'd0);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd348, 5'd0, 32'd0);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd360, 5'd0, 32'd0);
+        expect_retirement(32'd364, 5'd0, 32'd0);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd376, 5'd0, 32'd0);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd388, 5'd24, 32'h01235501);
+        expect_bubble(); // LW to BNE.
+        expect_retirement(32'd392, 5'd0, 32'd0);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd404, 5'd26, 32'd408);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd416, 5'd27, 32'd408);
+        expect_retirement(32'd420, 5'd28, 32'd437);
+        expect_retirement(32'd424, 5'd29, 32'd428);
+        repeat (2) expect_bubble();
+        expect_retirement(32'd436, 5'd30, 32'd428);
         expect_bubble();
 
         if (dmem_inst.mem[1] !== 32'd42 || dmem_inst.mem[2] !== 32'd42)
             $fatal(1, "Expected SW to write 42 to both byte addresses 4 and 8");
+        if (dmem_inst.mem[3] !== 32'h01235501)
+            $fatal(1, "Wrong-path instruction modified the word at byte address 12");
         if (!rs2_checked)
             $fatal(1, "The rs2 capture check never ran");
         $display("PASS: ID/EX captures the rs2 register number and read value");
@@ -294,6 +374,8 @@ module core_pipeline_tb;
         $display("PASS: register and immediate shifts, comparisons, and bitwise operations");
         $display("PASS: LUI, AUIPC at a nonzero PC, and forwarding their results");
         $display("PASS: LW and SW through RAM, store-data forwarding, and one-cycle load-use stalls");
+        $display("PASS: byte and halfword load extension and partial stores");
+        $display("PASS: branch forwarding, wrong-path flushing, and JAL/JALR targets and links");
         $finish;
     end
 endmodule

@@ -35,6 +35,12 @@ module core_pipeline (
         logic        mem_read;
         logic        mem_write;
         logic        reg_write;
+        logic [1:0]  mem_size;
+        logic        mem_unsigned;
+        logic        branch;
+        logic        jump;
+        logic        jalr;
+        logic [2:0]  branch_type;
     } decode_execute_t;
 
     typedef struct packed {
@@ -44,6 +50,8 @@ module core_pipeline (
         logic        reg_write;
         logic        mem_read;
         logic        mem_write;
+        logic [1:0]  mem_size;
+        logic        mem_unsigned;
         logic [31:0] result;
         logic [31:0] store_data;
     } execute_memory_t;
@@ -64,18 +72,24 @@ module core_pipeline (
     logic [6:0]  decode_opcode;
     logic [3:0]  decode_alu_op;
     logic [2:0]  decode_imm_type;
-    logic        decode_alu_src, decode_alu_a_sel, decode_valid, decode_supported;
+    logic        decode_alu_src, decode_alu_a_sel, decode_valid;
     logic        decode_mem_read, decode_mem_write, decode_reg_write;
+    logic [1:0]  decode_mem_size;
+    logic        decode_mem_unsigned, decode_branch, decode_jump, decode_jalr;
     logic        decode_uses_rs1, decode_uses_rs2, load_use_stall;
     logic        ex_mem_can_forward;
     logic [31:0] decode_rs1, decode_rs2, decode_imm, execute_result;
     logic [31:0] alu_a, decode_rs1_bypassed;
     logic [31:0] execute_rs2, decode_rs2_bypassed;
+    logic        branch_taken, redirect;
+    logic [31:0] next_pc, redirect_target;
+    logic [4:0]  byte_shift;
+    logic [31:0] load_shifted, load_result;
 
     pc pc_inst (
         .clk(clk),
         .reset(reset),
-        .pc_in(load_use_stall ? instr_addr : instr_addr + 32'd4),
+        .pc_in(next_pc),
         .pc_out(instr_addr)
     );
 
@@ -88,23 +102,22 @@ module core_pipeline (
         .valid(decode_valid),
         .mem_read(decode_mem_read),
         .mem_write(decode_mem_write),
-        .reg_write(decode_reg_write)
+        .reg_write(decode_reg_write),
+        .mem_size(decode_mem_size),
+        .mem_unsigned(decode_mem_unsigned),
+        .branch(decode_branch),
+        .jump(decode_jump),
+        .jalr(decode_jalr)
     );
 
     assign decode_opcode = if_id.instr[6:0];
-    assign decode_supported = decode_valid &&
-                              (decode_opcode == cpu_pkg::OP_R ||
-                               decode_opcode == cpu_pkg::OP_I ||
-                               decode_opcode == cpu_pkg::OP_LUI ||
-                               decode_opcode == cpu_pkg::OP_AUIPC ||
-                               ((decode_mem_read || decode_mem_write) &&
-                                if_id.instr[14:12] == 3'b010));
-
     assign decode_uses_rs1 = decode_opcode == cpu_pkg::OP_R ||
                              decode_opcode == cpu_pkg::OP_I ||
-                             decode_mem_read || decode_mem_write;
-    assign decode_uses_rs2 = decode_opcode == cpu_pkg::OP_R || decode_mem_write;
-    assign load_use_stall = if_id.valid && decode_supported &&
+                             decode_mem_read || decode_mem_write ||
+                             decode_branch || decode_jalr;
+    assign decode_uses_rs2 = decode_opcode == cpu_pkg::OP_R ||
+                             decode_mem_write || decode_branch;
+    assign load_use_stall = if_id.valid && decode_valid &&
                             id_ex.valid && id_ex.mem_read && id_ex.rd != 5'd0 &&
                             ((decode_uses_rs1 && if_id.instr[19:15] == id_ex.rd) ||
                              (decode_uses_rs2 && if_id.instr[24:20] == id_ex.rd));
@@ -132,6 +145,18 @@ module core_pipeline (
         .b(id_ex.use_rs2 ? execute_rs2 : id_ex.imm),
         .y(execute_result)
     );
+
+    branch_comp branch_comp_inst (
+        .a(alu_a),
+        .b(execute_rs2),
+        .branch_type(id_ex.branch_type),
+        .taken(branch_taken)
+    );
+
+    assign redirect = id_ex.valid && (id_ex.jump || (id_ex.branch && branch_taken));
+    assign redirect_target = id_ex.jalr ? (execute_result & 32'hffff_fffe) : id_ex.pc + id_ex.imm;
+    assign next_pc = redirect ? redirect_target :
+                     (load_use_stall ? instr_addr : instr_addr + 32'd4);
 
     // A load carries its address through EX/MEM and its loaded value through MEM/WB.
     assign ex_mem_can_forward = ex_mem.valid && ex_mem.reg_write &&
@@ -174,11 +199,15 @@ module core_pipeline (
             ex_mem <= '0;
             mem_wb <= '0;
         end else begin
-            if (load_use_stall) begin
+            if (redirect) begin
+                // The branch or jump continues to MEM, and both younger slots are discarded.
+                if_id <= '0;
+                id_ex <= '0;
+            end else if (load_use_stall) begin
                 id_ex <= '0;
             end else begin
                 if_id <= {1'b1, instr_addr, instr};
-                id_ex <= {if_id.valid && decode_supported,
+                id_ex <= {if_id.valid && decode_valid,
                           if_id.pc,
                           if_id.instr[11:7],   // rd
                           if_id.instr[19:15],  // rs1
@@ -191,21 +220,52 @@ module core_pipeline (
                           decode_alu_a_sel,
                           decode_mem_read,
                           decode_mem_write,
-                          decode_reg_write};
+                          decode_reg_write,
+                          decode_mem_size,
+                          decode_mem_unsigned,
+                          decode_branch,
+                          decode_jump,
+                          decode_jalr,
+                          if_id.instr[14:12]};
             end
 
             ex_mem <= {id_ex.valid, id_ex.pc, id_ex.rd, id_ex.reg_write,
-                       id_ex.mem_read, id_ex.mem_write, execute_result, execute_rs2};
+                       id_ex.mem_read, id_ex.mem_write, id_ex.mem_size, id_ex.mem_unsigned,
+                       (id_ex.jump ? id_ex.pc + 32'd4 : execute_result), execute_rs2};
             mem_wb <= {ex_mem.valid, ex_mem.pc, ex_mem.rd, ex_mem.reg_write,
-                       (ex_mem.mem_read ? data_read : ex_mem.result)};
+                       (ex_mem.mem_read ? load_result : ex_mem.result)};
         end
     end
 
     assign data_addr    = ex_mem.result;
-    assign data_write   = ex_mem.store_data;
+    assign byte_shift   = {data_addr[1:0], 3'b000};
+    assign data_write   = ex_mem.store_data << byte_shift;
     assign mem_read     = ex_mem.valid && ex_mem.mem_read && !reset;
     assign mem_write    = ex_mem.valid && ex_mem.mem_write && !reset;
-    assign data_byte_en = mem_write ? 4'b1111 : 4'b0000;
+    assign load_shifted = data_read >> byte_shift;
+
+    always_comb begin
+        case (ex_mem.mem_size)
+            2'b00: load_result = ex_mem.mem_unsigned ? {24'd0, load_shifted[7:0]} :
+                                                       {{24{load_shifted[7]}}, load_shifted[7:0]};
+            2'b01: load_result = ex_mem.mem_unsigned ? {16'd0, load_shifted[15:0]} :
+                                                       {{16{load_shifted[15]}}, load_shifted[15:0]};
+            2'b10: load_result = load_shifted;
+            default: load_result = 32'd0;
+        endcase
+    end
+
+    always_comb begin
+        data_byte_en = 4'b0000;
+        if (mem_write) begin
+            case (ex_mem.mem_size)
+                2'b00: data_byte_en = 4'b0001 << data_addr[1:0];
+                2'b01: data_byte_en = 4'b0011 << data_addr[1:0];
+                2'b10: data_byte_en = 4'b1111;
+                default: data_byte_en = 4'b0000;
+            endcase
+        end
+    end
 
     assign retire_valid   = mem_wb.valid && !reset;
     assign retire_pc      = mem_wb.pc;

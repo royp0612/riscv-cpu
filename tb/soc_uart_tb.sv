@@ -56,7 +56,7 @@ module soc_uart_tb;
             $fatal(1, "CPU did not observe both busy and idle status");
         if (led !== 16'd0)
             $fatal(1, "UART writes changed LEDs");
-        $display("PASS: CPU UART word/byte writes, status polling, busy and byte-lane gating");
+        $display("PASS: CPU UART word/byte writes, polling, byte-lane gating, and wrong-path store flushing");
         $finish;
     end
 

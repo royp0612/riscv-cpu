@@ -1,8 +1,10 @@
 module imem #(
-    parameter INIT_FILE = "C:/Users/melon/OneDrive/Documents/riscv-cpu/sw/prog.hex"
+    parameter INIT_FILE = "sw/prog.hex"
 ) (
     input  logic [31:0] addr,
-    output logic [31:0] instr
+    output logic [31:0] instr,
+    input  logic [31:0] data_addr,
+    output logic [31:0] data_out
 );
     logic [31:0] rom [0:1023];
 
@@ -13,4 +15,5 @@ module imem #(
     end
 
     assign instr = rom[addr[11:2]];
+    assign data_out = rom[data_addr[11:2]];
 endmodule

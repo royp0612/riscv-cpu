@@ -1,27 +1,29 @@
 # RV32I RISC-V Processor on FPGA
 
-A single-cycle 32-bit RISC-V (RV32I) processor designed from scratch in SystemVerilog, verified in simulation with self-checking testbenches, and deployed on a Xilinx Artix-7 FPGA (Digilent Basys 3).
+A 32-bit RISC-V processor designed in SystemVerilog for the Digilent Basys 3. The SoC uses a five-stage pipeline. The single-cycle reference core powered the FPGA demo below.
 
 <!-- Replace with your demo video or GIF -->
 ## Demo Video
 [![Demo video of the RISC-V CPU running on the Basys 3](https://img.youtube.com/vi/fxQB4NonvsM/0.jpg)](https://youtu.be/fxQB4NonvsM)
 ## Status
 
-- [x] All 37 RV32I base integer instructions implemented
+- [x] 37 arithmetic, memory, and control-flow instructions from RV32I
 - [x] Every module verified with its own self-checking testbench
 - [x] Full core verified with test programs (arithmetic, loads/stores, branch loops, JAL/JALR)
 - [x] System-on-chip with instruction/data memory and memory-mapped I/O
-- [x] Running on a Basys 3 at 50 MHz
-- [] RISC-V GCC toolchain: C programs running on the CPU
+- [x] Single-cycle build running on a Basys 3 at 50 MHz
+- [x] GCC-compiled C firmware with UART and GPIO verified in simulation
+- [x] Five-stage pipeline with forwarding, load-use stalls, and branch flushing
 - [ ] Official `riscv-tests` (rv32ui) suite
-- [ ] UART output ("Hello, RISC-V!")
-- [ ] 5-stage pipeline with forwarding and hazard detection
+- [ ] FPGA timing and board validation for the pipelined build
 
 ## Architecture
 
-![Single-cycle RV32I datapath](docs/datapath.png)
+`core_pipeline.sv` overlaps Fetch, Decode, Execute, Memory, and Writeback. Execute forwards operands and resolves branches and jumps. A load-use dependency stalls Fetch and Decode for one cycle. A redirect flushes both younger instructions.
 
-Each instruction completes in one clock cycle: fetch, decode, execute, memory access and writeback. Purple labels are control signals from the decoder; the green blocks (instruction and data memory) live outside the core in `soc.sv`.
+![Single-cycle reference datapath](docs/datapath.png)
+
+In the single-cycle reference diagram, purple labels show decoder control signals. The green instruction and data memories live outside the core in `soc.sv`.
 
 | Module | Description |
 | --- | --- |
@@ -31,9 +33,10 @@ Each instruction completes in one clock cycle: fetch, decode, execute, memory ac
 | `regfile.sv` | 32 × 32-bit register file, two combinational read ports, one write port, `x0` hardwired to zero |
 | `imm_gen.sv` | Immediate generator for the I, S, B, U and J formats, with sign extension |
 | `alu.sv` | 11-operation ALU (ADD, SUB, AND, OR, XOR, SLL, SRL, SRA, SLT, SLTU, pass-through for LUI) |
-| `branch_unit.sv` | Compares rs1/rs2 for BEQ, BNE, BLT, BGE, BLTU, BGEU |
+| `branch_comp.sv` | Compares rs1/rs2 for BEQ, BNE, BLT, BGE, BLTU, BGEU |
 | `dmem.sv` | Data memory with byte enables for SB/SH/SW |
-| `core.sv` | Connects the modules; next-PC logic, ALU input muxes, load sign/zero extension, writeback mux |
+| `core.sv` | Single-cycle reference core |
+| `core_pipeline.sv` | Five-stage core used by the SoC |
 | `soc.sv` | Core + memories + memory-mapped I/O |
 | `top.sv` | Basys 3 top level: clocking wizard, reset and switch synchronizers |
 | `cpu_package.sv` | Shared constants (ALU ops, immediate formats, writeback select) used by every module |
@@ -53,9 +56,9 @@ The CPU talks to hardware with ordinary `lw`/`sw` instructions; `soc.sv` decodes
 
 UART transmit uses 115200 baud, 8 data bits, no parity, one stop bit at the
 50 MHz CPU clock (434 clocks per bit). Include `uart.h` from `sw/main.c` and
-call `uart_putc('H');` to send a character. Polling in that helper prevents
-overwriting an active transmission. String literals still require data-memory
-initialization support; individual character calls work with the current linker.
+call `uart_putc('H')` for a character or `uart_puts("Hi\r\n")` for a string.
+The driver polls UART status before sending each byte. The CPU reads string
+literals from the read-only ROM window at `0x00002000`–`0x00002FFF`.
 The `uart_tx` output is exposed through `top.sv` and mapped to pin A18 by
 `Basys-3-Master.xdc` for the USB-UART connection. Update your Vivado constraints
 to include that line before generating a hardware bitstream.
@@ -74,7 +77,7 @@ Every module has a self-checking testbench in `tb/` that reports pass/fail. Test
 
 The full-core testbench runs programs and prints a commit log (PC, instruction, register written) for debugging, with waveforms viewed in GTKWave.
 
-## FPGA Results (Basys 3, Artix-7 XC7A35T)
+## Single-cycle FPGA results (Basys 3, Artix-7 XC7A35T)
 
 | Metric | Value |
 | --- | --- |
@@ -85,7 +88,7 @@ The full-core testbench runs programs and prints a commit log (PC, instruction, 
 
 ![Vivado implementation results](docs/vivado_results.png)
 
-At 100 MHz the design failed timing by 2.66 ns: the single-cycle critical path (register read → ALU → memory → writeback) is about 12.7 ns, limiting this design to roughly 79 MHz. Pipelining is the planned fix.
+At 100 MHz the single-cycle design failed timing by 2.66 ns. Its critical path through register read, ALU, memory, and writeback was about 12.7 ns. FPGA timing for the pipelined build is pending.
 
 Inputs from the board (reset button, switches) pass through two-flip-flop synchronizers, and reset is asserted asynchronously and released synchronously.
 
@@ -93,14 +96,15 @@ Inputs from the board (reset button, switches) pass through two-flip-flop synchr
 
 Instruction memory loads `sw/prog.hex` by default. Build it with `make -C sw`
 using the RISC-V toolchain, then run simulations from the repository root.
-The `INIT_FILE` parameter on `soc` and `imem` selects another program file.
+The `INIT_FILE` parameter on `top`, `soc`, or `imem` selects another program file.
 Unused instruction words are initialized to NOPs. The instruction memory holds
 1024 words (4 KB); the hex file must fit in that space.
 
-The regression's instruction-memory and SoC tests select `programs/demo.hex`,
-so they do not depend on generated C program output. For Vivado, add the selected
-hex file as a memory initialization source and ensure `INIT_FILE` resolves to it
-in the build working directory. Rebuild the FPGA bitstream after changing it.
+Run `python scripts/regress.py` from the repository root. The firmware test uses
+the checked-in `sw/prog.hex`. The other SoC tests use dedicated images in
+`programs/`. For Vivado, add the selected hex file as a memory initialization
+source and set the `top` parameter `INIT_FILE` to a path that resolves during
+synthesis. Rebuild the bitstream after changing the firmware image.
 
 Requires [Icarus Verilog](https://bleyer.org/icarus/) and GTKWave.
 
@@ -114,7 +118,12 @@ make          # main.c → prog.elf → prog.bin → prog.hex
 make dump     # view the generated assembly
 ```
 
-`crt0.S` sets up the stack and calls `main()`, and `link.ld` places the code at address 0, where the CPU starts after reset. `tb/program_tb.sv` runs the compiled program on the full SoC and checks the LEDs follow the switches.
+`crt0.S` sets up the stack, copies `.data` from ROM to RAM, and clears `.bss`
+before calling `main()`. The linker places code at address 0 and packs `.rodata`
+and the `.data` initializers in the same 4 KB ROM image. Run
+`python scripts/regress.py program -v` from the repository root to verify cold
+boot and warm reset, `Hi` over UART, and inverted switch values on the LEDs.
+When changing the demo behavior, update the expectations in `tb/program_tb.sv`.
 
 ```bash
 # ALU testbench
@@ -131,7 +140,7 @@ gtkwave core.vcd
 ## Building for the Basys 3
 
 1. Create a Vivado project for part `xc7a35tcpg236-1`.
-2. Add the files in `rtl/`, the program `.hex` file, and `constraints/basys3.xdc`.
+2. Add the files in `rtl/`, the program `.hex` file, and `Basys-3-Master.xdc`.
 3. Add a Clocking Wizard IP (`clk_wiz_0`): 100 MHz in, 50 MHz out.
 4. Set `top` as the top module, generate the bitstream, and program the board.
 
@@ -141,13 +150,11 @@ gtkwave core.vcd
 rtl/          SystemVerilog design files
 tb/           Testbenches
 programs/     Test programs (.hex)
-constraints/  Basys 3 pin constraints
+sw/           Bare-metal C firmware and build tools
 docs/         Diagrams and results
 ```
 
 ## Next Steps
 
-- Compile C programs for the CPU with the RISC-V GCC toolchain
 - Pass the official `riscv-tests` rv32ui suite
-- UART transmitter for text output
-- 5-stage pipeline with forwarding, load-use stalls and branch flushing
+- Verify pipelined FPGA timing and run the firmware demo on the Basys 3

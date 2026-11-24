@@ -10,4 +10,11 @@ static inline void uart_putc(char c) {
     UART_TX = (unsigned char)c;
 }
 
+static inline void uart_puts(const char *text) {
+    while (*text != '\0') {
+        uart_putc(*text);
+        ++text;
+    }
+}
+
 #endif

@@ -1,6 +1,31 @@
     .section .text.init
     .globl _start
 _start:
-    li   sp, 0x1000      # stack at the top of data memory (1024 words = 4 KB)
+    la sp, __stack_top
+
+    # Copy .data from ROM to RAM.
+    la t0, __data_load
+    la t1, __data_start
+    la t2, __data_end
+1:
+    bgeu t1, t2, 2f
+    lw   t3, 0(t0)
+    sw   t3, 0(t1)
+    addi t0, t0, 4
+    addi t1, t1, 4
+    j    1b
+
+    # Clear .bss in RAM.
+2:
+    la   t1, __bss_start
+    la   t2, __bss_end
+3:
+    bgeu t1, t2, 4f
+    sw   zero, 0(t1)
+    addi t1, t1, 4
+    j    3b
+
+4:
     call main
-1:  j    1b              # if main ever returns, loop here forever
+5:
+    j    5b

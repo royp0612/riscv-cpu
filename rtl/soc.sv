@@ -1,5 +1,5 @@
 module soc #(
-    parameter INIT_FILE = "C:/Users/melon/OneDrive/Documents/riscv-cpu/sw/prog.hex",
+    parameter INIT_FILE = "sw/prog.hex",
     parameter int UART_CLOCKS_PER_BIT = 434
 )(
     input logic clk,
@@ -12,8 +12,8 @@ module soc #(
     logic [31:0] data_addr, data_write, data_read;
     logic mem_read, mem_write;
     logic [3:0] data_byte_en;
-    logic [31:0] dmem_rdata;
-    logic is_mmio;
+    logic [31:0] dmem_rdata, imem_rdata;
+    logic is_mmio, is_rom_data;
     logic uart_start, uart_busy;
 
     
@@ -30,8 +30,10 @@ module soc #(
     );
 
     assign is_mmio = (data_addr[31:28] == 4'h1);
+    // Data-side alias of the instruction ROM, with the same byte offsets.
+    assign is_rom_data = (data_addr[31:12] == 20'h00002);
 
-    core core_inst (
+    core_pipeline core_inst (
         .clk          (clk),
         .reset        (reset),
         .instr_addr   (instr_addr),
@@ -45,14 +47,16 @@ module soc #(
     );
 
     imem #(.INIT_FILE(INIT_FILE)) imem_inst (
-        .addr  (instr_addr),
-        .instr (instr)
+        .addr      (instr_addr),
+        .instr     (instr),
+        .data_addr (data_addr),
+        .data_out  (imem_rdata)
     );
 
     dmem dmem_inst (
         .clk        (clk),
-        .mem_read   (mem_read && !is_mmio),
-        .mem_write  (mem_write && !is_mmio),
+        .mem_read   (mem_read  && !is_mmio && !is_rom_data),
+        .mem_write  (mem_write && !is_mmio && !is_rom_data),
         .addr       (data_addr),
         .write_data (data_write),
         .byte_en    (data_byte_en),
@@ -61,7 +65,9 @@ module soc #(
     always_comb begin
         data_read = 32'd0;
 
-        if (!is_mmio)
+        if (is_rom_data)
+            data_read = mem_read ? imem_rdata : 32'd0;
+        else if (!is_mmio)
             data_read = dmem_rdata;
         else if (mem_read &&
                 data_addr[31:2] == (32'h10000010 >> 2))
